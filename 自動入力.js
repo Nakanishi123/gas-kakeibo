@@ -1,190 +1,203 @@
-const GET_DAY = 1;//何日前までの物を取得するか
+const BEFORE_DAY = 5; //何日前までの物を取得するか
 
-function AAA() {
-  var Now = new Date();
-  var NowMonth = Now.getMonth() + 1;
-
-  var Yesterday = new Date();
-  Yesterday.setDate(Now.getDate() - 1);
-  var YesterdayMonth = Yesterday.getMonth() + 1;
-  var sheetname = String(YesterdayMonth) + "月"
-
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName(sheetname);
-
-  var JapanNet = Getmail("Ｖｉｓａデビット", Now, "customer2@cc.paypay-bank.co.jp")
-  var JapanNet_Hiki = Getmail("お引き落としのご連絡", Now, "customer2@cc.paypay-bank.co.jp")
-  var sonybank = Getmail("［Sony Bank WALLET ］Visaデビット", Now, "banking@sonybank.net")
-  var rakuten = Getmail("◆デビットカードご利用通知メール", Now, "service@ac.rakuten-bank.co.jp")
-  var rakuten_card = Getmail("【速報版】カード利用のお知らせ(本人ご利用分)", Now, "info@mail.rakuten-card.co.jp")
-  var rakuten_pay = Getmail("楽天", Now, "no-reply@pay.rakuten.co.jp")
-
-  //最終行取得(900,4)=(D900)から上に検索
-  var lastRow = sheet.getRange(900, 4).getNextDataCell(SpreadsheetApp.Direction.UP).getRow();
-
-  var Fnoyatsu = lastRow - 4
-  if (Fnoyatsu > 0) {
-    var IDs = sheet.getRange(5, 7, Fnoyatsu, 1).getValues();
-  } else {
-    var IDs = [];
-  }
-  Logger.log(IDs)
-  var NIDs = []
-  for (var i = 0; i < IDs.length; i++) {//配列で与えられるので整形
-    NIDs.push(IDs[i][0] + '');//文字列として認識させるため
+class Data {
+  constructor(name, price, date, category, object, id) {
+    this.name = name;
+    this.price = price;
+    this.date = date;
+    this.category = category;
+    this.object = object;
+    this.id = id;
   }
 
-  //スプシの形に合うように整形
-  JapanNet = Get_JN_VISA(JapanNet, NIDs)
-  JapanNet_Hiki = Get_JN_Hiki(JapanNet_Hiki, NIDs)
-  sonybank = Get_SonyBankWallet(sonybank, NIDs)
-  rakuten = Get_rakuten(rakuten, NIDs)
-  rakuten_card = Get_rakuten_card(rakuten_card, NIDs)
-  rakuten_pay = Get_rakuten_pay(rakuten_pay, NIDs)
-
-  lastRow++
-  lastRow = lastRow + SetMail(JapanNet, sheet, lastRow) //SetMailは配列の長さを出力する
-  lastRow = lastRow + SetMail(JapanNet_Hiki, sheet, lastRow)
-  lastRow = lastRow + SetMail(sonybank, sheet, lastRow)
-  lastRow = lastRow + SetMail(rakuten, sheet, lastRow)
-  lastRow = lastRow + SetMail(rakuten_card, sheet, lastRow)
-  lastRow = lastRow + SetMail(rakuten_pay, sheet, lastRow)
-
+  toRow() {
+    return [this.name, this.price, this.date, this.category, this.object, this.id];
+  }
 }
 
-function Get_JN_VISA(val, Juhuku) {
-  re = []
-  for (var i = 0; i < val.length; i++) {
-    if (Juhuku.indexOf(val[i][4]) === -1) {
-      var Kingaku = val[i][3].match(/お引落金額：(.{1,16})円/)
-      var Kameiten = val[i][3].match(/加盟店名：(.+)/)
-      Logger.log([Kingaku, Kameiten, val]);
-      try {
-        re.push([Kameiten[1], Kingaku[1], val[i][0], "JNB VISAデビット", '', val[i][4]])
-      } catch (error) {
-        console.log("エラー内容：" + error);
-      }
+class Parser {
+  constructor(category, subject, from, nameRegex, priceRegex, objectRegex, dateRegex, nameDefault) {
+    this.category = category;
+    this.subject = subject;
+    this.from = from;
+    this.nameRegex = nameRegex;
+    this.priceRegex = priceRegex;
+    this.objectRegex = objectRegex;
+    this.dateRegex = dateRegex;
+    this.nameDefault = nameDefault;
+  }
+}
+
+function autofill() {
+  const alreadyIds = getAlreadyId();
+  const parsers = [
+    new Parser( //d払い
+      'd払い',
+      '【d払い】決済完了のお知らせ(自動配信)',
+      'docomo',
+      /【加盟店名】\s*(.*)/,
+      /【ご利用代金】\D*((\d|.|,)+)/,
+      '',
+      /【決済日時】\s*(.*)/,
+      'd払い'
+    ),
+    new Parser( //楽天ペイ
+      '楽天ペイ',
+      '楽天ペイアプリご利用内容確認メール',
+      'no-reply@pay.rakuten.co.jp',
+      /ご利用店舗\s*(.+)/,
+      /決済総額\s*(.{1,16})円/,
+      '',
+      '',
+      '楽天ペイ'
+    ),
+    new Parser( //楽天カード
+      '楽天カード',
+      '【速報版】カード利用のお知らせ(本人ご利用分)',
+      'info@mail.rakuten-card.co.jp',
+      '',
+      /利用金額: (.{1,16}) 円/,
+      '',
+      /■利用日: (\d+\/\d+\/\d+)/,
+      '楽天カード'
+    ),
+    new Parser( // 楽天 デビット
+      '楽天 デビット',
+      '◆デビットカードご利用通知メール',
+      'service@ac.rakuten-bank.co.jp',
+      '',
+      /口座引落分：(.{1,16})円/,
+      '',
+      '',
+      '楽天 デビット'
+    ),
+    new Parser( // Sony Bank Wallet
+      'SonyBankWallet',
+      '［Sony Bank WALLET ］Visaデビット',
+      'banking@sonybank.net',
+      '',
+      /ご利用金額（※）：(.{1,16})円/,
+      /ご利用加盟店\s*：(.+)/,
+      '',
+      'SonyBankWallet'
+    ),
+    new Parser( // JapanNet Visa デビット
+      'JNB VISAデビット',
+      'Ｖｉｓａデビット',
+      'customer2@cc.paypay-bank.co.jp',
+      '',
+      /お引落金額：(.{1,16})円/,
+      /加盟店名：(.+)/,
+      '',
+      'JNB VISAデビット'
+    ),
+    new Parser( // JapanNet 引き落とし
+      'JNB 引き落とし',
+      'お引き落としのご連絡',
+      'customer2@cc.paypay-bank.co.jp',
+      '',
+      /お引落金額：(.{1,16})円/,
+      '',
+      '',
+      'JNB 引き落とし'
+    ),
+    new Parser( // メルカード
+      'メルカード',
+      'メルカードのご利用がありました',
+      'no-reply@mercari.jp',
+      /店舗名\s*：\s*(.*)/,
+      /決済金額\s*：\s*￥(.*)/,
+      '',
+      /決済日時\s*：\s*(.*)/,
+      'メルカード'
+    ),
+    new Parser( // メルペイ
+      'メルペイ',
+      'コード決済でお支払いがありました',
+      'no-reply@mercari.jp',
+      /店舗名\s*：\s*(.*)/,
+      /取引金額合計\s*：\s*￥(.*)/,
+      '',
+      /取引日時\s*：\s*(.*)/,
+      'メルペイ'
+    ),
+  ];
+  const data = parsers
+    .map((parser) => getData(parser, alreadyIds))
+    .flat()
+    .sort((a, b) => a.date - b.date);
+  paste(data);
+}
+
+function paste(data) {
+  const todayMonth = new Date().getMonth() + 1;
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  for (let i = 1; i <= todayMonth; i++) {
+    try {
+      const thisMonthData = data.filter((row) => row.date.getMonth() + 1 === i);
+      if (thisMonthData.length === 0) continue;
+
+      const sheet = spreadsheet.getSheetByName(`${i}月`);
+      const lastRow = sheet.getRange(900, 4).getNextDataCell(SpreadsheetApp.Direction.UP).getRow();
+      sheet
+        .getRange(lastRow + 1, 2, thisMonthData.length, 6)
+        .setValues(thisMonthData.map((row) => row.toRow()));
+    } catch (error) {
+      Logger.log(`${i}月 シートに入力できなかった`, error);
     }
   }
-  return re
 }
 
-function Get_JN_Hiki(val, Juhuku) {
-  re = []
-  for (var i = 0; i < val.length; i++) {
-    if (Juhuku.indexOf(val[i][4]) === -1) {
-      var Kingaku = val[i][3].match(/お引落金額：(.{1,16})円/)
-      Logger.log([Kingaku, val]);
-      re.push(["JNB 引き落とし", Kingaku[1], val[i][0], "JNB 引き落とし", '', val[i][4]])
+function getData(parser, alreadyIds) {
+  const mails = getMail(parser.subject, parser.from, alreadyIds);
+  const rows = mails.map((mail) => {
+    const body = mail.getPlainBody();
+    const receiveDate = mail.getDate();
+    const id = mail.getId();
+
+    const name = (body.match(parser.nameRegex) || [])[1] || parser.nameDefault;
+    const dateRaw = (body.match(parser.dateRegex) || [])[1] || receiveDate;
+    const date = new Date(dateRaw);
+    try {
+      const price = body.match(parser.priceRegex)[1];
+      return new Data(name, price, date, parser.category, '', id);
+    } catch (error) {
+      Logger.log(error);
+      return null;
+    }
+  });
+  return rows.filter((row) => row != null);
+}
+
+function getMail(querySubject, from, alreadyIds) {
+  const queryParts = [];
+  queryParts.push(`subject:${querySubject}`);
+  queryParts.push(`from:${from}`);
+
+  const todayStr = Utilities.formatDate(new Date(Date.now() + 86400000), 'JST', 'yyyy/M/d');
+  const afterDate = new Date(Date.now() - BEFORE_DAY * 24 * 60 * 60 * 1000);
+  const afterDateStr = Utilities.formatDate(afterDate, 'JST', 'yyyy/M/d');
+  queryParts.push(`after:${afterDateStr}`);
+  queryParts.push(`before:${todayStr}`);
+
+  const SearchQuery = queryParts.join(' ');
+  const threads = GmailApp.search(SearchQuery);
+  const messages = GmailApp.getMessagesForThreads(threads);
+  return messages.flat().filter((message) => !alreadyIds.includes(message.getId()));
+}
+
+function getAlreadyId() {
+  const todayMonth = new Date().getMonth() + 1;
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const alreadyIds = [];
+  for (let i = 1; i <= todayMonth; i++) {
+    const sheet = spreadsheet.getSheetByName(`${i}月`);
+    const lastRow = sheet.getRange(900, 4).getNextDataCell(SpreadsheetApp.Direction.UP).getRow();
+    const numRow = lastRow - 4;
+    if (numRow > 0) {
+      const ids = sheet.getRange(5, 7, numRow).getValues();
+      alreadyIds.push(...ids.flat());
     }
   }
-  return re
-}
-
-function Get_SonyBankWallet(val, Juhuku) {
-  re = []
-  for (var i = 0; i < val.length; i++) {
-    if (Juhuku.indexOf(val[i][4]) === -1) {
-      var Kingaku = val[i][3].match(/ご利用金額（※）：(.{1,16})円/)
-      var Kameiten = val[i][3].match(/ご利用加盟店\s*：(.+)/)
-      Logger.log([Kingaku, Kameiten, val]);
-      if (Kingaku != null && Kameiten != null) {
-        re.push([Kameiten[1], Kingaku[1], val[i][0], "SonyBankWallet", '', val[i][4]])
-      }
-    }
-  }
-  return re
-}
-
-function Get_rakuten(val, Juhuku) {
-  re = []
-  for (var i = 0; i < val.length; i++) {
-    if (Juhuku.indexOf(val[i][4]) === -1) {
-      var Kingaku = val[i][3].match(/口座引落分：(.{1,16})円/)
-      Logger.log([Kingaku, val]);
-      re.push(["楽天 デビット", Kingaku[1], val[i][0], "楽天 デビット", '', val[i][4]])
-    }
-  }
-  return re
-}
-
-function Get_rakuten_card(val, Juhuku) {
-  re = []
-  for (var i = 0; i < val.length; i++) {
-    if (Juhuku.indexOf(val[i][4]) === -1) {
-      var Kingaku = [...val[i][3].matchAll(/利用金額: (.{1,16}) 円/g)]
-      var day = [...val[i][3].matchAll(/■利用日: (\d+\/\d+\/\d+)/g)]
-      Logger.log([Kingaku, day, val]);
-      for (var j = 0; j < Kingaku.length; j++) {
-        re.push(["楽天カード", Kingaku[j][1], day[j][1], "楽天カード", '', val[i][4]])
-      }
-    }
-  }
-  return re
-}
-
-function Get_rakuten_pay(val, Juhuku) {
-  re = []
-  for (var i = 0; i < val.length; i++) {
-    if (Juhuku.indexOf(val[i][4]) === -1) {
-      var Kingaku = val[i][3].match(/決済総額\s*(.{1,16})円/)
-      var Kameiten = val[i][3].match(/ご利用店舗\s*(.+)/)
-
-      Logger.log([Kingaku, Kameiten, val]);
-      if (Kingaku != null && Kameiten != null) {
-        re.push([Kameiten[1], Kingaku[1], val[i][0], "楽天ペイ", '', val[i][4]])
-      }
-    }
-  }
-  return re
-}
-
-
-
-function SetMail(val, sheet, lastRow) {
-  if (val.length != 0) {
-    var colleng = val.length;
-    var range = sheet.getRange(lastRow, 2, colleng, 6);
-    range.setValues(val);
-  }
-  return val.length
-}
-
-function Getmail(keyword, date, from) {
-  SearchQuery = "";
-  if (keyword != undefined) {
-    SearchQuery = SearchQuery + "subject:" + keyword + " ";
-  }
-  if (from != undefined) {
-    SearchQuery = SearchQuery + "from:" + from + " ";
-  }
-  Logger.log(SearchQuery)
-  if (date != undefined) {
-    var adate = new Date();
-    adate.setDate(date.getDate() - GET_DAY);
-    adate = Utilities.formatDate(adate, 'JST', 'yyyy/M/d');
-    var bdate = new Date();
-    bdate.setDate(date.getDate());
-    bdate = Utilities.formatDate(bdate, 'JST', 'yyyy/M/d');
-    mailafter = "after:" + adate + " ";
-    mailbefore = "before:" + bdate + " ";
-    SearchQuery = SearchQuery + mailafter + mailbefore;
-  }
-
-  re = GmailApp.search(SearchQuery);
-  var reM = GmailApp.getMessagesForThreads(re);
-
-  var JNM = []
-  for (var i = 0; i < reM.length; i++) {
-    for (var j = 0; j < reM[i].length; j++) {
-      var date = reM[i][j].getDate();
-      var reply = reM[i][j].getReplyTo();
-      var subj = reM[i][j].getSubject();
-      var body = reM[i][j].getPlainBody().slice(0, 500);
-      var GettedId = reM[i][j].getId();
-      JNM.push([date, reply, subj, body, GettedId])
-    }
-  }
-  Logger.log(JNM)
-  return JNM
+  return alreadyIds;
 }
