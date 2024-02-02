@@ -75,9 +75,9 @@ function autofill() {
       'SonyBankWallet',
       '［Sony Bank WALLET ］Visaデビット',
       'banking@sonybank.net',
-      '',
-      /ご利用金額（※）：(.{1,16})円/,
       /ご利用加盟店\s*：(.+)/,
+      /ご利用金額（※）：(.{1,16})円/,
+      '',
       '',
       'SonyBankWallet'
     ),
@@ -85,9 +85,9 @@ function autofill() {
       'JNB VISAデビット',
       'Ｖｉｓａデビット',
       'customer2@cc.paypay-bank.co.jp',
-      '',
-      /お引落金額：(.{1,16})円/,
       /加盟店名：(.+)/,
+      /お引落金額：(.{1,16})円/,
+      '',
       '',
       'JNB VISAデビット'
     ),
