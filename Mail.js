@@ -48,7 +48,7 @@ function autofill() {
       /ご利用店舗\s*(.+)/,
       /決済総額\s*(.{1,16})円/,
       '',
-      '',
+      /ご利用日時\s*(.*)/,
       '楽天ペイ'
     ),
     new Parser( //楽天カード
@@ -157,7 +157,7 @@ function getData(parser, alreadyIds) {
 
     const name = (body.match(parser.nameRegex) || [])[1] || parser.nameDefault;
     const dateRaw = (body.match(parser.dateRegex) || [])[1] || receiveDate;
-    const date = new Date(dateRaw);
+    const date = new Date(dateRaw.replace(/\(.\)/,"")); //(火)などの曜日を削除して日付に変換
     try {
       const price = body.match(parser.priceRegex)[1];
       return new Data(name, price, date, parser.category, '', id);
