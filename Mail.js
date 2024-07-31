@@ -130,22 +130,17 @@ function autofill() {
 }
 
 function paste(data) {
-  const todayMonth = new Date().getMonth() + 1;
   const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-  for (let i = 1; i <= todayMonth; i++) {
-    try {
-      const thisMonthData = data.filter((row) => row.date.getMonth() + 1 === i);
-      if (thisMonthData.length === 0) continue;
-
-      const sheet = spreadsheet.getSheetByName(`${i}月`);
-      const lastRow = sheet.getRange(900, 4).getNextDataCell(SpreadsheetApp.Direction.UP).getRow();
-      sheet
-        .getRange(lastRow + 1, 2, thisMonthData.length, 6)
-        .setValues(thisMonthData.map((row) => row.toRow()));
-    } catch (error) {
-      Logger.log(`${i}月 シートに入力できなかった`, error);
+  let latestSheet = spreadsheet.getSheetByName("1月");
+  for(let i = 2; i <= 12; i++) {
+    const sheet = spreadsheet.getSheetByName(`${i}月`);
+    if(!sheet){
+      break;
     }
+    latestSheet = spreadsheet.getSheetByName(`${i}月`);
   }
+  const lastRow = latestSheet.getRange(900, 4).getNextDataCell(SpreadsheetApp.Direction.UP).getRow();
+  latestSheet.getRange(lastRow + 1, 2, data.length, 6).setValues(data.map((row) => row.toRow()));
 }
 
 function getData(parser, alreadyIds) {
@@ -190,8 +185,11 @@ function getAlreadyId() {
   const todayMonth = new Date().getMonth() + 1;
   const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
   const alreadyIds = [];
-  for (let i = 1; i <= todayMonth; i++) {
+  for (let i = 1; i <= 12; i++) {
     const sheet = spreadsheet.getSheetByName(`${i}月`);
+    if (!sheet) {
+      break;
+    }
     const lastRow = sheet.getRange(900, 4).getNextDataCell(SpreadsheetApp.Direction.UP).getRow();
     const numRow = lastRow - 4;
     if (numRow > 0) {
