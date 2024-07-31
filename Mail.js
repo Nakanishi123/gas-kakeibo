@@ -156,7 +156,7 @@ function getData(parser, alreadyIds) {
     const id = mail.getId();
 
     const name = (body.match(parser.nameRegex) || [])[1] || parser.nameDefault;
-    const dateRaw = (body.match(parser.dateRegex) || [])[1] || receiveDate;
+    const dateRaw = (body.match(parser.dateRegex) || [])[1] || receiveDate.toUTCString();
     const date = new Date(dateRaw.replace(/\(.\)/,"")); //(火)などの曜日を削除して日付に変換
     try {
       const price = body.match(parser.priceRegex)[1];
