@@ -130,6 +130,9 @@ function autofill() {
 }
 
 function paste(data) {
+  if(data.length === 0) {
+    return;
+  }
   const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
   let latestSheet = spreadsheet.getSheetByName("1月");
   for(let i = 2; i <= 12; i++) {
