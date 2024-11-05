@@ -121,6 +121,16 @@ function autofill() {
       /取引日時\s*：\s*(.*)/,
       'メルペイ'
     ),
+    new Parser( // メルペイ(iD)
+      'メルペイ',
+      'iD決済でお支払いがありました',
+      'no-reply@mercari.jp',
+      /店舗名\s*：\s*(.*)/,
+      /取引金額合計\s*：\s*￥(.*)/,
+      '',
+      /取引日時\s*：\s*(.*)/,
+      'メルペイ'
+    ),
   ];
   const data = parsers
     .map((parser) => getData(parser, alreadyIds))
