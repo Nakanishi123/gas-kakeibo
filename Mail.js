@@ -81,6 +81,16 @@ function autofill() {
       '',
       'SonyBankWallet'
     ),
+    new Parser( // Sony Bank Wallet(新)
+      'SonyBankWallet',
+      '［ソニー銀行］Sony Bank WALLET',
+      'banking@sonybank.jp',
+      /ご利用加盟店：(.+)/,
+      /ご利用金額：(.{1,16})円/,
+      '',
+      '',
+      'SonyBankWallet'
+    ),
     new Parser( // JapanNet Visa デビット
       'JNB VISAデビット',
       'Ｖｉｓａデビット',
