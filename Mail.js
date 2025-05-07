@@ -33,7 +33,7 @@ function autofill() {
   const parsers = [
     new Parser( //d払い
       'd払い',
-      '【d払い】決済完了のお知らせ(自動配信)',
+      '【d払い】',
       'docomo',
       /【加盟店名】\s*(.*)/,
       /【ご利用代金】\D*((\d|.|,)+)/,
@@ -140,19 +140,22 @@ function autofill() {
 }
 
 function paste(data) {
-  if(data.length === 0) {
+  if (data.length === 0) {
     return;
   }
   const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-  let latestSheet = spreadsheet.getSheetByName("1月");
-  for(let i = 2; i <= 12; i++) {
+  let latestSheet = spreadsheet.getSheetByName('1月');
+  for (let i = 2; i <= 12; i++) {
     const sheet = spreadsheet.getSheetByName(`${i}月`);
-    if(!sheet){
+    if (!sheet) {
       break;
     }
     latestSheet = spreadsheet.getSheetByName(`${i}月`);
   }
-  const lastRow = latestSheet.getRange(900, 4).getNextDataCell(SpreadsheetApp.Direction.UP).getRow();
+  const lastRow = latestSheet
+    .getRange(900, 4)
+    .getNextDataCell(SpreadsheetApp.Direction.UP)
+    .getRow();
   latestSheet.getRange(lastRow + 1, 2, data.length, 6).setValues(data.map((row) => row.toRow()));
 }
 
@@ -165,7 +168,7 @@ function getData(parser, alreadyIds) {
 
     const name = (body.match(parser.nameRegex) || [])[1] || parser.nameDefault;
     const dateRaw = (body.match(parser.dateRegex) || [])[1] || receiveDate.toUTCString();
-    const date = new Date(dateRaw.replace(/\(.\)/,"")); //(火)などの曜日を削除して日付に変換
+    const date = new Date(dateRaw.replace(/\(.\)/, '')); //(火)などの曜日を削除して日付に変換
     try {
       const price = body.match(parser.priceRegex)[1];
       return new Data(name, price, date, parser.category, '', id);
